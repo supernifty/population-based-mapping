@@ -127,7 +127,9 @@ def analyze(source, references, kmer, resolution, output, tsv_out, log_fh, stage
         fastq = '{0}.fastq'.format(source)
         generate_reads(open(source, 'r'), kmer, resolution, open(fastq, 'w'), chromosomes, log_fh)
     else:
-        chromosomes.append('chr') # default chromosome
+        with open(source, 'r') as fasta_in:
+            line = fasta_in.readline()
+            chromosomes.append(line[1:].split(' ')[0].strip())
     write_log(log_fh, 'stage {0} complete'.format(progress))
     progress += 1
     
