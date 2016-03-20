@@ -17,11 +17,26 @@ We can also generate a population mappability track.
 ## Installation
 
 ## Testing
+To run unit tests:
+```
+./test.sh
+```
 
 ## Usage
 
+Generate statistics by running the following:
 ```
-python population_mappability.py --source source.fasta  --targets target1.fasta,target2.fasta,...,targetn.fasta --kmer 100 --resolution 100
+python population_mappability.py --source source.fasta  --targets target1.fasta target2.fasta ... targetn.fasta --kmer 100 --resolution 100 --out all.tsv > map.bedgraph
+```
+
+Command used for e-coli analysis:
+```
+python src/main.py --source tests/e-coli-mg1655.fasta --targets data/*.fasta --kmer 100 --resolution 100 --out e-coli-62.tsv > e-coli-62.bedgraph
+```
+
+Visualization by running:
+```
+python src/plot.py --start 200000 --finish 300000 --out zoomed.pdf < e-coli-62.tsv
 ```
 
 ## Previous work
