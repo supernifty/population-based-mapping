@@ -4,9 +4,9 @@ import sys
 
 import matplotlib.pyplot as plt
 
-MAX_POINTS = 1e5
+MAX_POINTS = 20000
 
-def main(out, start=None, finish=None):
+def main(out, start=None, finish=None, reverse=False, unmapped_only=False, multimapped_only=False):
     first = True
     x = []
     single = []
@@ -37,22 +37,39 @@ def main(out, start=None, finish=None):
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    
-    # at the bottom in red - unmapped
-    ax.plot(x, unmapped, label='Unmapped', color='r')
-    ax.fill_between(x, unmapped, 0, color='r', alpha=0.5)
 
-    # unmapped + multimapped in blue
-    um = [ sum(y) for y in zip(unmapped, multiple) ]
-    ax.plot(x, um, label='Multimapped', color='b')
-    ax.fill_between(x, um, unmapped, color='b', alpha=0.5)
+    if multimapped_only:
+        ax.plot(x, multiple, label='Multimapped', color='b')
+        ax.fill_between(x, multiple, 0, color='b', alpha=0.5)
+    elif unmapped_only:
+        ax.plot(x, unmapped, label='Unmapped', color='b')
+        ax.fill_between(x, unmapped, 0, color='b', alpha=0.5)
+    elif reverse:
+        # at the bottom in red - multimapped
+        ax.plot(x, multiple, label='Multimapped', color='r')
+        ax.fill_between(x, multiple, 0, color='r', alpha=0.5)
+
+        # unmapped + multimapped in blue
+        um = [ sum(y) for y in zip(unmapped, multiple) ]
+        ax.plot(x, um, label='Unmapped', color='b')
+        ax.fill_between(x, um, multiple, color='b', alpha=0.5)
+
+    else:
+        # at the bottom in red - unmapped
+        ax.plot(x, unmapped, label='Unmapped', color='r')
+        ax.fill_between(x, unmapped, 0, color='r', alpha=0.5)
+
+        # unmapped + multimapped in blue
+        um = [ sum(y) for y in zip(unmapped, multiple) ]
+        ax.plot(x, um, label='Multimapped', color='b')
+        ax.fill_between(x, um, unmapped, color='b', alpha=0.5)
 
     # legend
     legend='upper right'
     leg = ax.legend( loc=legend, prop={'size':12})
     leg.get_frame().set_alpha(0.8)
     
-    ax.set_ylabel('% references affected')
+    ax.set_ylabel('% kmers affected')
     ax.set_xlabel('Source reference position')
 
     # stop rounding off with the x-axis length
@@ -67,6 +84,9 @@ if __name__ == '__main__':
     parser.add_argument('--start', type=int, required=False, help='start position')
     parser.add_argument('--finish', type=int, required=False, help='finish position')
     parser.add_argument('--out', required=False, default="plot.pdf", help='finish position')
+    parser.add_argument('--reverse', action='store_true', default=False, help='unmapped in blue')
+    parser.add_argument('--unmapped_only', action='store_true', default=False, help='unmapped in blue')
+    parser.add_argument('--multimapped_only', action='store_true', default=False, help='unmapped in blue')
     args = parser.parse_args()
-    main(args.out, args.start, args.finish)
+    main(args.out, args.start, args.finish, args.reverse, args.unmapped_only, args.multimapped_only)
 

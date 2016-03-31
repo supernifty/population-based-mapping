@@ -35,6 +35,11 @@ python src/main.py --source tests/e-coli-mg1655.fasta --targets data/ecoli/*.fas
 python src/main.py --source tests/e-coli-mg1655.fasta --targets data/ecoli/*.fasta --kmer 100 --resolution 10 --out e-coli-62.tsv > e-coli-62.bedgraph
 ```
 
+Command used for staph analysis:
+```
+python src/main.py --source data/staph/1.fasta --targets data/staph/*.fasta --kmer 100 --resolution 10 --out staph.160331.tsv > staph.160331.bedgraph
+```
+
 Visualization by running:
 ```
 python src/plot.py --start 200000 --finish 300000 --out zoomed.pdf < e-coli-62.tsv
