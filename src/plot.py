@@ -4,6 +4,8 @@ import sys
 
 import matplotlib.pyplot as plt
 
+MAX_POINTS = 1e5
+
 def main(out, start=None, finish=None):
     first = True
     x = []
@@ -24,6 +26,15 @@ def main(out, start=None, finish=None):
             unmapped.append(int(fields[3]) / total * 100)
 
     print "Plotting {0} items".format(len(x))
+
+    while len(x) > MAX_POINTS:
+        # reduce size of all
+        x = x[::2]
+        single = single[::2]
+        multiple = multiple[::2]
+        unmapped = unmapped[::2]
+        print "Plotting {0} items".format(len(x))
+
     fig = plt.figure()
     ax = fig.add_subplot(111)
     
@@ -46,6 +57,7 @@ def main(out, start=None, finish=None):
 
     # stop rounding off with the x-axis length
     plt.xlim(xmax=max(x), xmin=min(x))
+    plt.ylim(ymax=100.0, ymin=0.0)
     
     fig.savefig(out, format='pdf', dpi=1000)
 

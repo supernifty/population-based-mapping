@@ -59,11 +59,43 @@ def index_reference(fasta_file, log_fh):
 def align_reference(fastq, reference, sam, log_fh):
     run('bwa mem -t 8 %s %s > %s' % (reference, fastq, sam), log_fh)
 
+def update_range(start, count, deltas, dicts):
+    '''
+        read not mapped, update all positions with the unmapped status
+    '''
+    for x in xrange(start, start+count):
+        for delta, target in zip(deltas, dicts):
+            target[x] += delta
+
+def handle_mapped(start, count, mapq, seen_once, seen_multiple, unique, multi, unmapped):
+    '''
+        read was mapped. iterate over each position in the read and update depending on if it's been seen before:
+        - if the position has been seen at least once before, 
+          - if it's been seen exactly once before: take it off the unique list, add to the multi list
+          - else it's been seen more than once already, do nothing
+        - otherwise, this is the first time for this position...
+          - if mapq is acceptable, add to the unique list
+          - else consider it a multimap
+    '''
+    if start in seen_once:
+        if start not in seen_multiple: # seen exactly once before now
+            seen_multiple.add(start)
+            update_range(start, count, (-1, 1, 0), (unique, multi, unmapped))
+        else:
+            pass # seen more than once - do nothing
+    elif mapq > 0: # position specified, not seen before, positive mapq
+        seen_once.add(start)
+        update_range(start, count, (1, 0, 0), (unique, multi, unmapped))
+    else: # position specified, not seen before, mapq = 0 -> assume it's a multi map 
+        seen_once.add(start)
+        seen_multiple.add(start)
+        update_range(start, count, (0, 1, 0), (unique, multi, unmapped))
+ 
 def analyze_sam(sam_fh, unique, multi, unmapped, log_fh):
-    all_originals = set() # seen once
-    all_multiples = set() # seen more than once
+    seen_once = set() # seen once
+    seen_multiple = set() # seen more than once
     for line in sam_fh:
-        if line.startswith('@'):
+        if line.startswith('@'): # skip comments
             continue
         fields = line.strip('\n').split('\t')
         original_pos = int(fields[0].split('_')[1]) # ignore chromosome
@@ -71,28 +103,10 @@ def analyze_sam(sam_fh, unique, multi, unmapped, log_fh):
         new_pos = int(fields[3])
         mapq = int(fields[4])
         if new_pos == 0: # unmapped
-            unique[original_pos] += 0
-            multi[original_pos] += 0
-            unmapped[original_pos] += 1
-        elif original_pos in all_originals: # seen before - multiple map
-            if original_pos not in all_multiples: # not seen as multiple before
-                unique[original_pos] -= 1
-                all_multiples.add(original_pos)
-                multi[original_pos] += 1
-                unmapped[original_pos] += 0
-            # else nothing to do, it's another multi map
-        elif mapq > 0: # position specified, not seen before, positive mapq
-            unique[original_pos] += 1
-            multi[original_pos] += 0
-            unmapped[original_pos] += 0
-            all_originals.add(original_pos)
-        else: # position specified, not seen before, mapq = 0 -> assume it's a multi map 
-            all_originals.add(original_pos)
-            all_multiples.add(original_pos)
-            unique[original_pos] += 0
-            multi[original_pos] += 1
-            unmapped[original_pos] += 0
-        
+            update_range(original_pos, len(fields[9]), (0, 0, 1), (unique, multi, unmapped))
+        else:
+            handle_mapped(original_pos, len(fields[9]), mapq, seen_once, seen_multiple, unique, multi, unmapped)
+       
 def write_bedgraph_header(output):
     #output.write('track type=bedGraph name=track_label description=center_label visibility=display_mode color=r,g,b altColor=r,g,b priority=priority autoScale=on|off alwaysZero=on|off gridDefault=on|off maxHeightPixels=max:default:min graphType=bar|points viewLimits=lower:upper yLineMark=real-value yLineOnOff=on|off windowingFunction=maximum|mean|minimum smoothingWindow=off|2-16\n')
     output.write('track type=bedGraph\n')
@@ -121,7 +135,7 @@ def analyze(source, references, kmer, resolution, output, tsv_out, log_fh, stage
         evaluate and generate data
     '''
     progress = 0
-    # stage 0 generate reads
+    # stage 0 generate reads for single source
     chromosomes = []
     if progress >= stage:
         fastq = '{0}.fastq'.format(source)
@@ -133,27 +147,28 @@ def analyze(source, references, kmer, resolution, output, tsv_out, log_fh, stage
     write_log(log_fh, 'stage {0} complete'.format(progress))
     progress += 1
     
-    # stage 1: index align 
+    # stage 1: index reference and align source to it
     if progress >= stage:
-        for idx, reference in enumerate(references):
+        for idx, reference in enumerate(references): # each reference genome
             index_reference(reference, log_fh) # index
             sam = '{0}_{1}.sam'.format(source, idx)
-            align_reference(fastq, reference, sam, log_fh) # align
+            align_reference(fastq, reference, sam, log_fh) # align source to this reference
     write_log(log_fh, 'stage {0} complete'.format(progress))
     progress += 1
 
     # stage 2: analyze
     sams = []
-    unique = collections.defaultdict(int)
-    multi = collections.defaultdict(int)
-    unmapped = collections.defaultdict(int)
+    unique = collections.defaultdict(int) # uniquely mapped to reference
+    multi = collections.defaultdict(int) # mapped to multiple locations
+    unmapped = collections.defaultdict(int) # didn't map to reference
     write_log(log_fh, 'references: {0}'.format(references))
-    for idx, reference in enumerate(references):
+    overlaps = kmer / resolution
+    for idx, reference in enumerate(references): # each reference
         sam = '{0}_{1}.sam'.format(source, idx)
         sams.append(sam)
         write_log(log_fh, 'analyzing sam file {0}: {1}...'.format(idx, sam))
-        analyze_sam(open(sam, 'r'), unique, multi, unmapped, log_fh) # analyze
-        write_stats(log_fh, unique, multi, unmapped, len(sams))
+        analyze_sam(open(sam, 'r'), unique, multi, unmapped, log_fh) # analyze: update unique/multi/unmapped counts
+        write_stats(log_fh, unique, multi, unmapped, overlaps * len(sams)) # general stats
         write_log(log_fh, 'analyzing sam file: done')
 
     # write bedgraph result
@@ -161,12 +176,12 @@ def analyze(source, references, kmer, resolution, output, tsv_out, log_fh, stage
     write_bedgraph_header(output)
     for key, value in unique.items():
         pos = int(key)
-        score = 1. * value / len(references)
-        output.write('{0} {1} {2} {3:.3f}\n'.format(chromosomes[0], pos, pos + resolution, score))
+        score = 1. * overlaps * value / len(references) # normalize
+        output.write('{0} {1} {2} {3:.3f}\n'.format(chromosomes[0], pos, pos + 1, score))
     write_log(log_fh, 'writing bedgraph: done')
 
     write_log(log_fh, 'stats...')
-    write_stats(log_fh, unique, multi, unmapped, len(sams))
+    write_stats(log_fh, unique, multi, unmapped, overlaps * len(sams))
 
     if tsv_out:
         write_log(log_fh, 'tsv...')
@@ -183,7 +198,7 @@ def main():
     parser.add_argument('--kmer', type=int, default=100, help='size of kmers')
     parser.add_argument('--resolution', type=int, default=10, help='resolution of analysis (1 means analyze every base)')
     parser.add_argument('--out', required=False, help='tsv file of combined results')
-    parser.add_argument('--stage', required=False, default=0, type=int, help='stage to start from (0,1,2)')
+    parser.add_argument('--stage', required=False, default=0, type=int, help='stage to start from (0=generate reads,1=index and align,2=analyze)')
     args = parser.parse_args()
     analyze(args.source, args.targets, args.kmer, args.resolution, sys.stdout, args.out, sys.stderr, args.stage)
 
