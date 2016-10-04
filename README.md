@@ -45,6 +45,22 @@ Visualization by running:
 python src/plot.py --start 200000 --finish 300000 --out zoomed.pdf < e-coli-62.tsv
 ```
 
+## To annotate against features
+
+Get gff file:
+```
+curl ftp://ftp.ensemblgenomes.org/pub/bacteria/release-32/gff3/bacteria_0_collection/escherichia_coli_str_k_12_substr_mg1655/Escherichia_coli_str_k_12_substr_mg1655.ASM584v2.32.gff3.gz > Escherichia_coli_str_k_12_substr_mg1655.ASM584v2.32.gff3.gz
+```
+Simplify by only considering lines containing "<tab>gene<tab>".
+Change chromosome in .bedgraph to match. 
+```
+bedtools sort -i e-coli-62.bedgraph > e-coli-62.bedgraph.sorted
+```
+
+```
+bedtools map -a data/annot/ecoli-mg1655.genes.gff3 -b e-coli-62.bedgraph.sorted -c 4 -o mean
+```
+
 ## Previous work
 
 ## Future work
